@@ -1,0 +1,24 @@
+name = "nju-class"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# 静态前端（index.html + bootstrap）。非 /search/* 的请求由 Assets 直接服务。
+assets = { directory = "./public", binding = "ASSETS" }
+
+# 每小时刷新一次数据（替代原 Flask 后台线程）
+[triggers]
+crons = ["0 * * * *"]
+
+# D1 数据库：先 `wrangler d1 create nju-class`，把返回的 database_id 填到下面
+[[d1_databases]]
+binding = "DB"
+database_name = "nju-class"
+database_id = "13c5efcc-ce0f-4b36-8b93-cd93f53638bf"
+
+[vars]
+# 本地/测试时设为 "true" 可通过 GET /__refresh 手动触发刷新；生产建议设 "false"
+ALLOW_MANUAL_REFRESH = "false"
+
+# 密钥（不要写进文件）：
+#   wrangler secret put SEATABLE_API_TOKEN

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NJU选课助手</title>
+    <link href="/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .container {
+            margin-top: 50px;
+        }
+        .card {
+            margin-bottom: 20px;
+        }
+        .changelog {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 0.8em;
+            text-align: right;
+            max-width: 200px; /* 限制最大宽度 */
+            word-wrap: break-word; /* 自动换行 */
+        }
+        @media (max-width: 768px) {
+            .changelog {
+                position: static;
+                text-align: center;
+                margin-top: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center">NJU选课助手</h1>
+        <div class="text-center mb-4">
+            <span>Created by carottx</span> |
+            <a href="https://github.com/carottX/nju-class" target="_blank">项目主页</a> |
+            欢迎通过<a href="mailto:xuzm0616@gmail.com">邮件</a>或者<a href="https://table.nju.edu.cn/external-apps/7aded834-74a2-43cc-b515-fb8e01656ef2/" target="_blank">NJUTable</a>添加更多红黑榜！
+        </div>
+        <div class="changelog">
+            <p>Changelog:</p>
+            <p>v1.0 支持不完全匹配</p>
+            <p>v1.1 教师支持首字母匹配</p>
+            <p>v1.2 支持从nju table上动态拉取，使用json作为数据源，添加更多数据源</p>
+            <p>v2.0 迁移至 Cloudflare (D1 + FTS5)</p>
+        </div>
+        <div class="row">
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label for="teacherName">按老师查找</label>
+                    <input type="text" id="teacherName" class="form-control" placeholder="输入老师名字">
+                    <button class="btn btn-primary mt-2" onclick="searchTeacher()">查找</button>
+                </div>
+                <div id="teacherResults"></div>
+            </div>
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label for="courseName">按课程查找</label>
+                    <input type="text" id="courseName" class="form-control" placeholder="输入课程名字">
+                    <button class="btn btn-primary mt-2" onclick="searchCourse()">查找</button>
+                </div>
+                <div id="courseResults"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        window.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('teacherName').addEventListener('keydown', function(event) {
+                if (event.key === 'Enter') {
+                    searchTeacher();
+                }
+            });
+            document.getElementById('courseName').addEventListener('keydown', function(event) {
+                if (event.key === 'Enter') {
+                    searchCourse();
+                }
+            });
+        });
+
+        function renderResults(resultsDiv, data) {
+            resultsDiv.innerHTML = '';
+            if (data.error) {
+                resultsDiv.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+            } else if (data.message) {
+                resultsDiv.innerHTML = `<div class="alert alert-warning">${data.message}</div>`;
+            } else {
+                data.forEach(item => {
+                    const reviews = Object.keys(item)
+                        .filter(key => key.startsWith('评价'))
+                        .map(key => item[key])
+                        .filter(review => review);
+
+                    const sources = item.来源 ? (Array.isArray(item.来源) ? item.来源.join(', ') : item.来源) : '未知来源';
+
+                    if (reviews.length > 0) {
+                        reviews.forEach(review => {
+                            const card = document.createElement('div');
+                            card.className = 'card';
+                            card.innerHTML = `
+                                <div class="card-body">
+                                    <h5 class="card-title">${item.课程名称} - ${item.教师}</h5>
+                                    <small class="text-muted">来源: ${sources}</small>
+                                    <p class="card-text">${review}</p>
+                                </div>
+                            `;
+                            resultsDiv.appendChild(card);
+                        });
+                    } else {
+                        const card = document.createElement('div');
+                        card.className = 'card';
+                        card.innerHTML = `
+                            <div class="card-body">
+                                <h5 class="card-title">${item.课程名称} - ${item.教师}</h5>
+                                <small class="text-muted">来源: ${sources}</small>
+                                <p class="card-text text-muted">暂无评价</p>
+                            </div>
+                        `;
+                        resultsDiv.appendChild(card);
+                    }
+                });
+            }
+        }
+
+        function searchTeacher() {
+            const teacherName = document.getElementById('teacherName').value;
+            fetch(`/search/teacher?name=${encodeURIComponent(teacherName)}`)
+                .then(response => response.json())
+                .then(data => renderResults(document.getElementById('teacherResults'), data));
+        }
+
+        function searchCourse() {
+            const courseName = document.getElementById('courseName').value;
+            fetch(`/search/course?name=${encodeURIComponent(courseName)}`)
+                .then(response => response.json())
+                .then(data => renderResults(document.getElementById('courseResults'), data));
+        }
+    </script>
+</body>
+</html>
