@@ -59,12 +59,53 @@
             });
         });
 
+        function showAlert(resultsDiv, type, text) {
+            resultsDiv.innerHTML = '';
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = text;
+            resultsDiv.appendChild(alert);
+        }
+
+        function showLoading(resultsDiv) {
+            resultsDiv.innerHTML = '';
+            const loading = document.createElement('div');
+            loading.className = 'text-center text-muted my-3';
+            loading.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> 搜索中…';
+            resultsDiv.appendChild(loading);
+        }
+
+        function buildCard(item, sources, reviewText, isEmpty) {
+            const card = document.createElement('div');
+            card.className = 'card';
+            const body = document.createElement('div');
+            body.className = 'card-body';
+
+            const title = document.createElement('h5');
+            title.className = 'card-title';
+            title.textContent = `${item.课程名称} - ${item.教师}`;
+
+            const source = document.createElement('small');
+            source.className = 'text-muted';
+            source.textContent = `来源: ${sources}`;
+
+            const review = document.createElement('p');
+            review.className = isEmpty ? 'card-text text-muted' : 'card-text';
+            review.textContent = reviewText;
+
+            body.appendChild(title);
+            body.appendChild(source);
+            body.appendChild(review);
+            card.appendChild(body);
+            return card;
+        }
+
         function renderResults(resultsDiv, data) {
             resultsDiv.innerHTML = '';
             if (data.error) {
-                resultsDiv.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+                showAlert(resultsDiv, 'danger', data.error);
             } else if (data.message) {
-                resultsDiv.innerHTML = `<div class="alert alert-warning">${data.message}</div>`;
+                showAlert(resultsDiv, 'warning', data.message);
             } else {
                 data.forEach(item => {
                     const reviews = Object.keys(item)
@@ -76,45 +117,36 @@
 
                     if (reviews.length > 0) {
                         reviews.forEach(review => {
-                            const card = document.createElement('div');
-                            card.className = 'card';
-                            card.innerHTML = `
-                                <div class="card-body">
-                                    <h5 class="card-title">${item.课程名称} - ${item.教师}</h5>
-                                    <small class="text-muted">来源: ${sources}</small>
-                                    <p class="card-text">${review}</p>
-                                </div>
-                            `;
-                            resultsDiv.appendChild(card);
+                            resultsDiv.appendChild(buildCard(item, sources, review, false));
                         });
                     } else {
-                        const card = document.createElement('div');
-                        card.className = 'card';
-                        card.innerHTML = `
-                            <div class="card-body">
-                                <h5 class="card-title">${item.课程名称} - ${item.教师}</h5>
-                                <small class="text-muted">来源: ${sources}</small>
-                                <p class="card-text text-muted">暂无评价</p>
-                            </div>
-                        `;
-                        resultsDiv.appendChild(card);
+                        resultsDiv.appendChild(buildCard(item, sources, '暂无评价', true));
                     }
                 });
             }
         }
 
+        function doSearch(endpoint, inputId, resultsId) {
+            const name = document.getElementById(inputId).value;
+            const resultsDiv = document.getElementById(resultsId);
+            showLoading(resultsDiv);
+            fetch(`/search/${endpoint}?name=${encodeURIComponent(name)}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`服务器错误 (${response.status})`);
+                    }
+                    return response.json();
+                })
+                .then(data => renderResults(resultsDiv, data))
+                .catch(error => showAlert(resultsDiv, 'danger', `请求失败：${error.message}`));
+        }
+
         function searchTeacher() {
-            const teacherName = document.getElementById('teacherName').value;
-            fetch(`/search/teacher?name=${encodeURIComponent(teacherName)}`)
-                .then(response => response.json())
-                .then(data => renderResults(document.getElementById('teacherResults'), data));
+            doSearch('teacher', 'teacherName', 'teacherResults');
         }
 
         function searchCourse() {
-            const courseName = document.getElementById('courseName').value;
-            fetch(`/search/course?name=${encodeURIComponent(courseName)}`)
-                .then(response => response.json())
-                .then(data => renderResults(document.getElementById('courseResults'), data));
+            doSearch('course', 'courseName', 'courseResults');
         }
     </script>
 </body>
