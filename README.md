@@ -49,3 +49,13 @@ npx wrangler deploy
 ## 更新静态历史源
 
 把新的 xlsx 用原仓库的 `convert.py` 转成 json，替换 `src/data/` 下对应文件，重新 `wrangler deploy`。
+
+## 许可证
+
+本项目是 [carottX/nju-class](https://github.com/carottX/nju-class) 的衍生作品，原项目采用 **GPL-3.0** 许可证。根据 GPL-3.0 的 copyleft 要求，本项目同样以 **GPL-3.0** 许可证发布。
+
+详见 [LICENSE](LICENSE)。这意味着：
+
+- 你可以自由使用、修改和分发本项目；
+- 任何基于本项目的衍生作品也必须以 GPL-3.0 发布并开放源代码；
+- 必须保留原作者版权声明与本许可证声明。
