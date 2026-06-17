@@ -147,12 +147,13 @@
             const resultsDiv = document.getElementById(resultsId);
             showLoading(resultsDiv);
             fetch(`/search/${endpoint}?name=${encodeURIComponent(name)}`)
-                .then(response => {
-                    if (!response.ok) {
+                .then(response =>
+                    // 无论状态码如何，都尝试解析 JSON，交给 renderResults 展示后端的 error/message；
+                    // 仅当响应体不是 JSON 时，才退回到用状态码提示
+                    response.json().catch(() => {
                         throw new Error(`服务器错误 (${response.status})`);
-                    }
-                    return response.json();
-                })
+                    })
+                )
                 .then(data => renderResults(resultsDiv, data))
                 .catch(error => showAlert(resultsDiv, 'danger', `请求失败：${error.message}`));
         }
