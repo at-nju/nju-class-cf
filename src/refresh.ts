@@ -1,5 +1,5 @@
 import { STATIC_SOURCES } from "./data/static";
-import { fetchSeatable } from "./seatable";
+import { fetchSeatable, njuTableBase, fork25Base } from "./seatable";
 import { mergeEntries, type ReviewRow } from "./merge";
 import type { Env } from "./index";
 
@@ -78,11 +78,16 @@ export async function writeToD1(db: D1Database, rows: ReviewRow[]): Promise<void
 // 完整刷新：拉 SeaTable → 合并静态历史源 → 算拼音 → 重写 D1。
 // 任一步失败则抛出，调用方保留旧数据（不清表），与原后台线程的容错一致。
 export async function refresh(env: Env): Promise<number> {
-  const seatableEntries = await fetchSeatable(env.SEATABLE_API_TOKEN);
-  const groups = [
-    { fallbackSource: "seatable", entries: seatableEntries },
-    ...STATIC_SOURCES,
-  ];
+  // 两个 base 都可选：配置了哪个 token 就拉哪个。
+  const bases = [];
+  if (env.SEATABLE_API_TOKEN) bases.push(njuTableBase(env.SEATABLE_API_TOKEN));
+  if (env.SEATABLE_FORK_API_TOKEN) bases.push(fork25Base(env.SEATABLE_FORK_API_TOKEN));
+
+  const seatableGroups = [];
+  for (const base of bases) {
+    seatableGroups.push({ fallbackSource: "seatable", entries: await fetchSeatable(base) });
+  }
+  const groups = [...seatableGroups, ...STATIC_SOURCES];
   const rows = mergeEntries(groups);
   await writeToD1(env.DB, rows);
   return rows.length;

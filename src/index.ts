@@ -4,7 +4,8 @@ import { refresh, seedStaticOnly } from "./refresh";
 export interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
-  SEATABLE_API_TOKEN: string;
+  SEATABLE_API_TOKEN?: string; // NJU Table base
+  SEATABLE_FORK_API_TOKEN?: string; // fork25 base
   ALLOW_MANUAL_REFRESH?: string;
 }
 

@@ -20,5 +20,6 @@ database_id = "13c5efcc-ce0f-4b36-8b93-cd93f53638bf"
 # 本地/测试时设为 "true" 可通过 GET /__refresh 手动触发刷新；生产建议设 "false"
 ALLOW_MANUAL_REFRESH = "false"
 
-# 密钥（不要写进文件）：
-#   wrangler secret put SEATABLE_API_TOKEN
+# 密钥（不要写进文件，两个都可选）：
+#   wrangler secret put SEATABLE_API_TOKEN        # NJU Table base
+#   wrangler secret put SEATABLE_FORK_API_TOKEN   # fork25 base

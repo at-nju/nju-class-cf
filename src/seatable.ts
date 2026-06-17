@@ -3,14 +3,49 @@ import type { RawEntry } from "./data/static";
 // 与原 nju_table.py 一致
 const SERVER_URL = "https://table.nju.edu.cn";
 
-// 各年份子表对应的 [课程列名, 老师列名]
-const ROW_NAMES: Record<string, [string, string]> = {
+// 一个 SeaTable base 的接入配置。NJU Table 与 fork25 是两个对等、互不依赖的 base。
+export interface SeatableBase {
+  apiToken: string;
+  // 返回某子表的 [课程列名, 老师列名]，null 表示跳过该子表。
+  resolveColumns: (tableName: string, columns: string[]) => [string, string] | null;
+  sourceLabel: (tableName: string) => string;
+}
+
+const NJU_TABLE_ROW_NAMES: Record<string, [string, string]> = {
   "2025": ["课程", "授课老师"],
   "2024": ["课程", "授课老师"],
   "2022": ["课程", "老师"],
   "2021": ["课程名", "任课老师"],
   "2020": ["课程", "老师"],
 };
+
+// NJU Table base：按 4 位年份前缀映射列名，跳过 2023。
+export function njuTableBase(apiToken: string): SeatableBase {
+  return {
+    apiToken,
+    resolveColumns: (tableName) => {
+      if (!/^\d{4}/.test(tableName)) return null;
+      if (tableName.startsWith("2023")) return null;
+      return NJU_TABLE_ROW_NAMES[tableName.slice(0, 4)] ?? null;
+    },
+    sourceLabel: (tableName) => `NJU Table - ${tableName}`,
+  };
+}
+
+// fork25 base：课程列名因子表而异（「课程」或「课程（填课表上的全名）」），故按列名识别。
+export function fork25Base(apiToken: string): SeatableBase {
+  return {
+    apiToken,
+    resolveColumns: (tableName, columns) => {
+      if (!/^\d{4}/.test(tableName)) return null;
+      const courseCol = columns.find((c) => c.startsWith("课程"));
+      const teacherCol = columns.find((c) => c.startsWith("老师"));
+      if (!courseCol || !teacherCol) return null;
+      return [courseCol, teacherCol];
+    },
+    sourceLabel: (tableName) => `fork25 - ${tableName}`,
+  };
+}
 
 interface AppAccessToken {
   access_token: string;
@@ -76,21 +111,19 @@ async function listRows(token: AppAccessToken, tableName: string): Promise<any[]
   return all;
 }
 
-// 端口自 nju_table.fetch_data：拉取所有以 4 位年份开头的子表，跳过 2023。
-export async function fetchSeatable(apiToken: string): Promise<RawEntry[]> {
-  const token = await authenticate(apiToken);
+// 端口自 nju_table.fetch_data：按 base 配置拉取相关子表并归一为 RawEntry。
+export async function fetchSeatable(base: SeatableBase): Promise<RawEntry[]> {
+  const token = await authenticate(base.apiToken);
   const metadata = await getMetadata(token);
   const tables: any[] = metadata.tables ?? [];
 
   const result: RawEntry[] = [];
   for (const table of tables) {
     const tableName: string = table.name;
-    if (!/^\d{4}/.test(tableName)) continue;
-    if (tableName.startsWith("2023")) continue;
-
-    const year = tableName.slice(0, 4);
-    const mapping = ROW_NAMES[year];
-    if (!mapping) continue; // 未知年份子表跳过（原代码会 KeyError，这里安全跳过）
+    // 用 metadata 的列名先判定是否处理，避免为要跳过的子表白拉数据。
+    const colNames: string[] = (table.columns ?? []).map((c: any) => c.name);
+    const mapping = base.resolveColumns(tableName, colNames);
+    if (!mapping) continue;
     const [courseCol, teacherCol] = mapping;
 
     const rows = await listRows(token, tableName);
@@ -105,7 +138,7 @@ export async function fetchSeatable(apiToken: string): Promise<RawEntry[]> {
       const entry: RawEntry = {
         课程名称: row[courseCol],
         教师: row[teacherCol],
-        来源: `NJU Table - ${tableName}`,
+        来源: base.sourceLabel(tableName),
       };
       // 收集所有 "评价" 开头的非空列，重新编号为 评价_0, 评价_1, ...
       let cnt = 0;
