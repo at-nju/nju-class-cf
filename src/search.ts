@@ -1,5 +1,4 @@
-// 分层模糊搜索：精确 → 前缀 → 子串(FTS5 trigram) → 拼音全拼 → 拼音首字母 → 子序列兜底。
-// 各层在一次 db.batch 中并发执行，按 id 去重保留最优层级，再按 (层级, id) 排序。
+// 分层模糊搜索：精确 -> 前缀 -> 子串 -> 拼音全拼 -> 拼音首字母 -> 子序列
 
 export type Field = "teacher" | "course";
 
@@ -7,7 +6,7 @@ interface DbRow {
   id: number;
   course: string | null;
   teacher: string | null;
-  sources: string | null; // JSON 数组字符串
+  sources: string | null; // JSON 数组字符串的来源列表
   review: string | null;
 }
 
@@ -30,27 +29,27 @@ export async function search(
   field: Field,
   query: string,
 ): Promise<Record<string, unknown>[]> {
-  const col = field; // reviews.teacher / reviews.course
+  const col = field;
   const pyCol = `${field}_py`;
   const initCol = `${field}_initials`;
 
   const esc = likeEscape(query);
   const chars = [...query];
   const normPy = query.toLowerCase().replace(/\s+/g, "");
-  const isRomanized = /^[a-z]+$/.test(normPy); // 纯字母 → 视为拼音输入
+  const isRomanized = /^[a-z]+$/.test(normPy); // 纯字母输入视为拼音或英文
 
   const tiers: { tier: number; stmt: D1PreparedStatement }[] = [];
 
-  // 1. 精确
+  // 1. 精确匹配
   tiers.push({ tier: 1, stmt: db.prepare(`${SELECT} WHERE ${col} = ? LIMIT ${PER_TIER_LIMIT}`).bind(query) });
 
-  // 2. 前缀
+  // 2. 前缀匹配
   tiers.push({
     tier: 2,
     stmt: db.prepare(`${SELECT} WHERE ${col} LIKE ? ESCAPE '\\' LIMIT ${PER_TIER_LIMIT}`).bind(esc + "%"),
   });
 
-  // 3. 子串：≥3 字符走 FTS5 trigram，否则退化为 LIKE '%q%'
+  // 3. 子串匹配：>=3 字符使用 FTS5 trigram，否则退化为 LIKE '%q%'
   if (chars.length >= 3) {
     const phrase = query.replace(/"/g, '""');
     tiers.push({
@@ -72,7 +71,7 @@ export async function search(
     });
   }
 
-  // 4 & 5. 拼音（仅当输入为纯字母时；中文输入与拼音列天然不匹配，跳过以省开销）
+  // 4 & 5. 拼音匹配（仅输入为拼音时）
   if (isRomanized) {
     const escPy = likeEscape(normPy);
     tiers.push({
@@ -81,7 +80,7 @@ export async function search(
         .prepare(`${SELECT} WHERE ${pyCol} LIKE ? ESCAPE '\\' LIMIT ${PER_TIER_LIMIT}`)
         .bind("%" + escPy + "%"),
     });
-    // 首字母按 token 前缀匹配（token 以空格分隔），等价原 initials.startswith(q)
+
     tiers.push({
       tier: 5,
       stmt: db
@@ -92,7 +91,7 @@ export async function search(
     });
   }
 
-  // 6. 子序列兜底（保留原 .*join 的宽松召回），≥2 字符才用，避免单字命中过宽
+  // 6. 子序列匹配（>=2 字符）
   if (chars.length >= 2) {
     const subseq = "%" + chars.map(likeEscape).join("%") + "%";
     tiers.push({
@@ -103,7 +102,7 @@ export async function search(
 
   const results = await db.batch<DbRow>(tiers.map((t) => t.stmt));
 
-  // 按 id 去重，保留命中的最低层级
+  // 按 id 去重，保留最优匹配层级
   const best = new Map<number, { tier: number; row: DbRow }>();
   results.forEach((res, i) => {
     const tier = tiers[i].tier;

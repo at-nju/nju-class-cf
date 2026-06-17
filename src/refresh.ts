@@ -3,8 +3,8 @@ import { fetchSeatable, njuTableBase, fork25Base } from "./seatable";
 import { mergeEntries, type ReviewRow } from "./merge";
 import type { Env } from "./index";
 
-const ROWS_PER_STMT = 11; // D1 单条语句最多 100 个绑定参数；9 列 × 11 = 99
-const STMTS_PER_BATCH = 50; // 每个 db.batch 的语句数（≈550 行/批，减少往返）
+const ROWS_PER_STMT = 11; // 9列 × 11行 = 99绑定参数 (D1限制最多100个)
+const STMTS_PER_BATCH = 50; // 每个 batch 的语句数
 
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -12,7 +12,7 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-// 把合并好的行写入暂存表，再一次性原子换入正式表 + 重建 FTS。
+// 写入暂存表，原子替换至正式表并重建 FTS
 export async function writeToD1(db: D1Database, rows: ReviewRow[]): Promise<void> {
   await db.prepare("DELETE FROM reviews_staging").run();
 
@@ -56,8 +56,7 @@ export async function writeToD1(db: D1Database, rows: ReviewRow[]): Promise<void
   }
   await flush();
 
-  // 原子换入：清空正式表与 FTS，从暂存表整体灌入，再清空暂存表。
-  // INSERT ... SELECT 在 D1 服务端执行，无参数绑定，速度快。
+  // 原子替换：清空旧数据，从暂存表导入，并更新 FTS
   await db.batch([
     db.prepare("DELETE FROM reviews"),
     db.prepare("DELETE FROM reviews_fts"),
@@ -75,10 +74,8 @@ export async function writeToD1(db: D1Database, rows: ReviewRow[]): Promise<void
   ]);
 }
 
-// 完整刷新：拉 SeaTable → 合并静态历史源 → 算拼音 → 重写 D1。
-// 任一步失败则抛出，调用方保留旧数据（不清表），与原后台线程的容错一致。
+// 刷新数据：拉取 SeaTable、合并静态数据、更新 D1
 export async function refresh(env: Env): Promise<number> {
-  // 两个 base 都可选：配置了哪个 token 就拉哪个。
   const bases = [];
   if (env.SEATABLE_API_TOKEN) bases.push(njuTableBase(env.SEATABLE_API_TOKEN));
   if (env.SEATABLE_FORK_API_TOKEN) bases.push(fork25Base(env.SEATABLE_FORK_API_TOKEN));
@@ -93,7 +90,7 @@ export async function refresh(env: Env): Promise<number> {
   return rows.length;
 }
 
-// 仅用静态历史源填充 D1（不拉 SeaTable），供本地开发在无 token 时验证搜索。
+// 仅使用静态数据填充 D1
 export async function seedStaticOnly(env: Env): Promise<number> {
   const rows = mergeEntries(STATIC_SOURCES);
   await writeToD1(env.DB, rows);

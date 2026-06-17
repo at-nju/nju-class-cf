@@ -1,5 +1,4 @@
-// 静态历史数据源（由 convert.py 从 xlsx 离线转出，手动更新后替换这些 JSON）。
-// 这些源没有逐条 "来源" 字段，因此合并时用文件名作为兜底来源，与原 merge_json_files 行为一致。
+// 静态历史数据源
 import nanxiaobao from "./南小宝.json";
 import oldList from "./旧红黑榜.json";
 import list2024 from "./红黑榜_2024.json";
@@ -9,7 +8,7 @@ export interface RawEntry {
   课程名称?: string | null;
   教师?: string | null;
   来源?: string | string[];
-  [key: string]: unknown; // 评价_0, 评价_1, ... 以及其它列
+  [key: string]: unknown; // 评价等额外字段
 }
 
 export interface SourceGroup {

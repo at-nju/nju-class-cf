@@ -1,12 +1,11 @@
 import type { RawEntry } from "./data/static";
 
-// 与原 nju_table.py 一致
 const SERVER_URL = "https://table.nju.edu.cn";
 
-// 一个 SeaTable base 的接入配置。NJU Table 与 fork25 是两个对等、互不依赖的 base。
+// SeaTable base 接入配置
 export interface SeatableBase {
   apiToken: string;
-  // 返回某子表的 [课程列名, 老师列名]，null 表示跳过该子表。
+  // 解析某子表的目标列名，返回 null 表示跳过
   resolveColumns: (tableName: string, columns: string[]) => [string, string] | null;
   sourceLabel: (tableName: string) => string;
 }
@@ -19,7 +18,7 @@ const NJU_TABLE_ROW_NAMES: Record<string, [string, string]> = {
   "2020": ["课程", "老师"],
 };
 
-// NJU Table base：按 4 位年份前缀映射列名，跳过 2023。
+// NJU Table 映射规则：按年份前缀匹配，跳过 2023
 export function njuTableBase(apiToken: string): SeatableBase {
   return {
     apiToken,
@@ -32,7 +31,7 @@ export function njuTableBase(apiToken: string): SeatableBase {
   };
 }
 
-// fork25 base：课程列名因子表而异（「课程」或「课程（填课表上的全名）」），故按列名识别。
+// fork25 映射规则：基于列名前缀匹配
 export function fork25Base(apiToken: string): SeatableBase {
   return {
     apiToken,
@@ -50,8 +49,8 @@ export function fork25Base(apiToken: string): SeatableBase {
 interface AppAccessToken {
   access_token: string;
   dtable_uuid: string;
-  dtable_server: string; // 新版形如 https://table.nju.edu.cn/api-gateway/
-  use_api_gateway?: boolean; // 新版 SeaTable 走 API Gateway（api/v2）
+  dtable_server: string;
+  use_api_gateway?: boolean;
 }
 
 async function authenticate(apiToken: string): Promise<AppAccessToken> {
@@ -65,7 +64,7 @@ async function authenticate(apiToken: string): Promise<AppAccessToken> {
 }
 
 function apiBase(token: AppAccessToken): string {
-  // dtable_server 末尾通常带 /，规范化后按是否走 API Gateway 选择 v2 / v1
+  // 获取 API 请求根路径
   const root = token.dtable_server.replace(/\/+$/, "");
   const version = token.use_api_gateway ? "v2" : "v1";
   return `${root}/api/${version}`;
@@ -83,7 +82,7 @@ async function getMetadata(token: AppAccessToken): Promise<any> {
   return data.metadata;
 }
 
-// 分页拉取整张子表（SeaTable 单次最多 1000 行，原 Python SDK 自动翻页，这里手动实现）
+// 分页拉取子表所有行
 async function listRows(token: AppAccessToken, tableName: string): Promise<any[]> {
   const base = apiBase(token);
   const limit = 1000;
@@ -95,7 +94,7 @@ async function listRows(token: AppAccessToken, tableName: string): Promise<any[]
     url.searchParams.set("table_name", tableName);
     url.searchParams.set("limit", String(limit));
     url.searchParams.set("start", String(start));
-    url.searchParams.set("convert_keys", "true"); // 返回以列名（课程/老师/评价N）为键，而非列 key
+    url.searchParams.set("convert_keys", "true"); // 使用列名作为 key
     const res = await fetch(url.toString(), {
       headers: { Authorization: `Token ${token.access_token}`, Accept: "application/json" },
     });
@@ -111,7 +110,7 @@ async function listRows(token: AppAccessToken, tableName: string): Promise<any[]
   return all;
 }
 
-// 端口自 nju_table.fetch_data：按 base 配置拉取相关子表并归一为 RawEntry。
+// 获取 SeaTable 数据并归一化
 export async function fetchSeatable(base: SeatableBase): Promise<RawEntry[]> {
   const token = await authenticate(base.apiToken);
   const metadata = await getMetadata(token);
@@ -120,7 +119,6 @@ export async function fetchSeatable(base: SeatableBase): Promise<RawEntry[]> {
   const result: RawEntry[] = [];
   for (const table of tables) {
     const tableName: string = table.name;
-    // 用 metadata 的列名先判定是否处理，避免为要跳过的子表白拉数据。
     const colNames: string[] = (table.columns ?? []).map((c: any) => c.name);
     const mapping = base.resolveColumns(tableName, colNames);
     if (!mapping) continue;
@@ -128,7 +126,7 @@ export async function fetchSeatable(base: SeatableBase): Promise<RawEntry[]> {
 
     const rows = await listRows(token, tableName);
     if (rows.length === 0) continue;
-    // 与原逻辑一致：用首行判断该子表是否含所需列
+    // 校验所需列是否存在
     if (!(courseCol in rows[0]) || !(teacherCol in rows[0])) continue;
 
     for (const row of rows) {
@@ -140,7 +138,7 @@ export async function fetchSeatable(base: SeatableBase): Promise<RawEntry[]> {
         教师: row[teacherCol],
         来源: base.sourceLabel(tableName),
       };
-      // 收集所有 "评价" 开头的非空列，重新编号为 评价_0, 评价_1, ...
+      // 提取并整理所有评价列
       let cnt = 0;
       for (const key of Object.keys(row)) {
         if (key.startsWith("评价") && row[key]) {
