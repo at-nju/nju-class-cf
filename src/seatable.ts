@@ -1,4 +1,4 @@
-import type { RawEntry } from "./data/static";
+import { extractReviews, type Entry } from "./merge";
 
 const SERVER_URL = "https://table.nju.edu.cn";
 
@@ -126,13 +126,13 @@ async function listRows(token: AppAccessToken, tableName: string): Promise<any[]
   return all;
 }
 
-// 获取 SeaTable 数据并归一化
-export async function fetchSeatable(base: SeatableBase): Promise<RawEntry[]> {
+// SeaTable adapter：拉取数据，每条评价归一成一个 Entry
+export async function fetchSeatable(base: SeatableBase): Promise<Entry[]> {
   const token = await authenticate(base.apiToken);
   const metadata = await getMetadata(token);
   const tables: any[] = metadata.tables ?? [];
 
-  const result: RawEntry[] = [];
+  const result: Entry[] = [];
   for (const table of tables) {
     const tableName: string = table.name;
     const colNames: string[] = (table.columns ?? []).map((c: any) => c.name);
@@ -149,20 +149,15 @@ export async function fetchSeatable(base: SeatableBase): Promise<RawEntry[]> {
       if (!row[courseCol] && !row[teacherCol]) continue;
       if ("额外标签" in row && row["额外标签"] === "允许额外补充标签") continue;
 
-      const entry: RawEntry = {
-        课程名称: row[courseCol],
-        教师: row[teacherCol],
-        来源: base.sourceLabel(tableName, row),
-      };
-      // 提取并整理所有评价列
-      let cnt = 0;
-      for (const key of Object.keys(row)) {
-        if (key.startsWith("评价") && row[key]) {
-          entry[`评价_${cnt}`] = row[key];
-          cnt += 1;
-        }
+      const source = base.sourceLabel(tableName, row);
+      for (const review of extractReviews(row)) {
+        result.push({
+          course: row[courseCol] ?? null,
+          teacher: row[teacherCol] ?? null,
+          review,
+          sources: [source],
+        });
       }
-      result.push(entry);
     }
   }
   return result;

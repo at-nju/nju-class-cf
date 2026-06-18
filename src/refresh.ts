@@ -1,6 +1,6 @@
-import { STATIC_SOURCES } from "./data/static";
+import { loadStatic } from "./data/static";
 import { fetchSeatable, njuTableBase, fork25Base, astraBase } from "./seatable";
-import { mergeEntries, type ReviewRow } from "./merge";
+import { mergeEntries, type Entry, type ReviewRow } from "./merge";
 import type { Env } from "./index";
 
 const ROWS_PER_STMT = 11; // 9列 × 11行 = 99绑定参数 (D1限制最多100个)
@@ -81,19 +81,16 @@ export async function refresh(env: Env): Promise<number> {
   if (env.SEATABLE_FORK_API_TOKEN) bases.push(fork25Base(env.SEATABLE_FORK_API_TOKEN));
   if (env.SEATABLE_ASTRA_API_TOKEN) bases.push(astraBase(env.SEATABLE_ASTRA_API_TOKEN));
 
-  const seatableGroups = [];
-  for (const base of bases) {
-    seatableGroups.push({ fallbackSource: "seatable", entries: await fetchSeatable(base) });
-  }
-  const groups = [...seatableGroups, ...STATIC_SOURCES];
-  const rows = mergeEntries(groups);
+  const seatableEntries = (await Promise.all(bases.map((base) => fetchSeatable(base)))).flat();
+  const entries: Entry[] = [...seatableEntries, ...loadStatic()];
+  const rows = mergeEntries(entries);
   await writeToD1(env.DB, rows);
   return rows.length;
 }
 
 // 仅使用静态数据填充 D1
 export async function seedStaticOnly(env: Env): Promise<number> {
-  const rows = mergeEntries(STATIC_SOURCES);
+  const rows = mergeEntries(loadStatic());
   await writeToD1(env.DB, rows);
   return rows.length;
 }
