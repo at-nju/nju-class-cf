@@ -10,6 +10,8 @@ export interface SeatableBase {
   resolveColumns: (tableName: string, columns: string[]) => [string, string] | null;
   // 生成来源标签，row 可用于按行取更细的来源信息
   sourceLabel: (tableName: string, row?: Record<string, unknown>) => string;
+  // 可选：从一行生成附加在评价正文最前面的前缀（如 ad-astra 的评分字段）；无内容返回空串
+  reviewPrefix?: (row: Record<string, unknown>) => string;
 }
 
 const NJU_TABLE_ROW_NAMES: Record<string, [string, string]> = {
@@ -59,6 +61,17 @@ export function astraBase(apiToken: string): SeatableBase {
     sourceLabel: (_tableName, row) => {
       const lib = row?.["来源库"];
       return typeof lib === "string" && lib ? `鼓励你学哪门课榜 - ${lib}` : "鼓励你学哪门课榜";
+    },
+    reviewPrefix: (row) => {
+      const fields = ["课程难度", "给分好坏", "作业多少", "收获多少"];
+      const parts = fields
+        .map((f) => {
+          const v = row[f];
+          const s = typeof v === "string" ? v.trim() : v != null ? String(v).trim() : "";
+          return s ? `${f}：${s}` : null;
+        })
+        .filter((p): p is string => p !== null);
+      return parts.join(" | ");
     },
   };
 }
@@ -150,7 +163,14 @@ export async function fetchSeatable(base: SeatableBase): Promise<Entry[]> {
       if (!row[courseCol] && !row[teacherCol]) continue;
 
       const source = base.sourceLabel(tableName, row);
-      for (const review of extractReviews(row)) {
+      const prefix = base.reviewPrefix?.(row) ?? "";
+      const reviews = extractReviews(row);
+
+      // 有前缀时拼到正文最前面；正文为空但有前缀则生成仅评分条目
+      const decorated = reviews.map((r) => (prefix ? `${prefix}\n\n${r}` : r));
+      if (decorated.length === 0 && prefix) decorated.push(prefix);
+
+      for (const review of decorated) {
         result.push({
           course: row[courseCol] ?? null,
           teacher: row[teacherCol] ?? null,
