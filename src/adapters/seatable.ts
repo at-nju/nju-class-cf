@@ -1,4 +1,5 @@
-import { extractReviews, type Entry } from "./merge";
+import type { Entry } from "../entry";
+import { extractReviews } from "./extract";
 
 const SERVER_URL = "https://table.nju.edu.cn";
 
@@ -147,7 +148,6 @@ export async function fetchSeatable(base: SeatableBase): Promise<Entry[]> {
 
     for (const row of rows) {
       if (!row[courseCol] && !row[teacherCol]) continue;
-      if ("额外标签" in row && row["额外标签"] === "允许额外补充标签") continue;
 
       const source = base.sourceLabel(tableName, row);
       for (const review of extractReviews(row)) {

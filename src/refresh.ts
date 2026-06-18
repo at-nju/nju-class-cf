@@ -1,6 +1,8 @@
-import { loadStatic } from "./data/static";
-import { fetchSeatable, njuTableBase, fork25Base, astraBase } from "./seatable";
-import { mergeEntries, type Entry, type ReviewRow } from "./merge";
+import { loadStatic } from "./adapters/static";
+import { fetchSeatable, njuTableBase, fork25Base, astraBase } from "./adapters/seatable";
+import { dedup } from "./dedup";
+import { buildPinyin } from "./pinyin";
+import type { Entry } from "./entry";
 import type { Env } from "./index";
 
 const ROWS_PER_STMT = 11; // 9列 × 11行 = 99绑定参数 (D1限制最多100个)
@@ -12,11 +14,11 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-// 写入暂存表，原子替换至正式表并重建 FTS
-export async function writeToD1(db: D1Database, rows: ReviewRow[]): Promise<void> {
+// 写入暂存表，原子替换至正式表并重建 FTS。拼音是写库时的派生物，在此内联算出。
+export async function writeToD1(db: D1Database, entries: Entry[]): Promise<void> {
   await db.prepare("DELETE FROM reviews_staging").run();
 
-  const rowChunks = chunk(rows, ROWS_PER_STMT);
+  const rowChunks = chunk(entries, ROWS_PER_STMT);
   let id = 0;
   let pending: D1PreparedStatement[] = [];
 
@@ -29,18 +31,20 @@ export async function writeToD1(db: D1Database, rows: ReviewRow[]): Promise<void
   for (const rc of rowChunks) {
     const placeholders = rc.map(() => "(?,?,?,?,?,?,?,?,?)").join(",");
     const binds: unknown[] = [];
-    for (const r of rc) {
+    for (const e of rc) {
       id += 1;
+      const tp = buildPinyin(e.teacher);
+      const cp = buildPinyin(e.course);
       binds.push(
         id,
-        r.course,
-        r.teacher,
-        JSON.stringify(r.sources),
-        r.review,
-        r.teacher_py,
-        r.teacher_initials,
-        r.course_py,
-        r.course_initials,
+        e.course,
+        e.teacher,
+        JSON.stringify(e.sources),
+        e.review,
+        tp.py,
+        tp.initials,
+        cp.py,
+        cp.initials,
       );
     }
     pending.push(
@@ -82,15 +86,14 @@ export async function refresh(env: Env): Promise<number> {
   if (env.SEATABLE_ASTRA_API_TOKEN) bases.push(astraBase(env.SEATABLE_ASTRA_API_TOKEN));
 
   const seatableEntries = (await Promise.all(bases.map((base) => fetchSeatable(base)))).flat();
-  const entries: Entry[] = [...seatableEntries, ...loadStatic()];
-  const rows = mergeEntries(entries);
-  await writeToD1(env.DB, rows);
-  return rows.length;
+  const entries = dedup([...seatableEntries, ...loadStatic()]);
+  await writeToD1(env.DB, entries);
+  return entries.length;
 }
 
 // 仅使用静态数据填充 D1
 export async function seedStaticOnly(env: Env): Promise<number> {
-  const rows = mergeEntries(loadStatic());
-  await writeToD1(env.DB, rows);
-  return rows.length;
+  const entries = dedup(loadStatic());
+  await writeToD1(env.DB, entries);
+  return entries.length;
 }

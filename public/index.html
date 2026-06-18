@@ -99,7 +99,7 @@
 
             const title = document.createElement('h5');
             title.className = 'card-title';
-            title.textContent = `${item.课程名称} - ${item.教师}`;
+            title.textContent = `${item.course} - ${item.teacher}`;
 
             const source = document.createElement('small');
             source.className = 'text-muted';
@@ -124,17 +124,9 @@
                 showAlert(resultsDiv, 'warning', data.message);
             } else {
                 data.forEach(item => {
-                    const reviews = Object.keys(item)
-                        .filter(key => key.startsWith('评价'))
-                        .map(key => item[key])
-                        .filter(review => review);
-
-                    const sources = item.来源 ? (Array.isArray(item.来源) ? item.来源.join(', ') : item.来源) : '未知来源';
-
-                    if (reviews.length > 0) {
-                        reviews.forEach(review => {
-                            resultsDiv.appendChild(buildCard(item, sources, review, false));
-                        });
+                    const sources = Array.isArray(item.sources) && item.sources.length ? item.sources.join(', ') : '未知来源';
+                    if (item.review) {
+                        resultsDiv.appendChild(buildCard(item, sources, item.review, false));
                     } else {
                         resultsDiv.appendChild(buildCard(item, sources, '暂无评价', true));
                     }

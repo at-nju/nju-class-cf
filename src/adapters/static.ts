@@ -1,11 +1,12 @@
-// 静态历史数据源
-import nanxiaobao from "./南小宝.json";
-import oldList from "./旧红黑榜.json";
-import list2024 from "./红黑榜_2024.json";
-import list2023 from "./2023级本科生红黑榜.json";
-import { extractReviews, type Entry } from "../merge";
+// 静态历史数据源（src/data/*.json，原始格式带 评价_N 编号键）
+import nanxiaobao from "../data/南小宝.json";
+import oldList from "../data/旧红黑榜.json";
+import list2024 from "../data/红黑榜_2024.json";
+import list2023 from "../data/2023级本科生红黑榜.json";
+import type { Entry } from "../entry";
+import { extractReviews } from "./extract";
 
-// 静态 JSON adapter：磁盘上的 评价_N 格式，每条评价归一成一个 Entry
+// 静态 JSON adapter：每条评价归一成一个 Entry
 function jsonAdapter(rows: unknown[], source: string): Entry[] {
   const result: Entry[] = [];
   for (const raw of rows) {
