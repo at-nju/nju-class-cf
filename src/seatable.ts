@@ -7,7 +7,8 @@ export interface SeatableBase {
   apiToken: string;
   // 解析某子表的目标列名，返回 null 表示跳过
   resolveColumns: (tableName: string, columns: string[]) => [string, string] | null;
-  sourceLabel: (tableName: string) => string;
+  // 生成来源标签，row 可用于按行取更细的来源信息
+  sourceLabel: (tableName: string, row?: Record<string, unknown>) => string;
 }
 
 const NJU_TABLE_ROW_NAMES: Record<string, [string, string]> = {
@@ -43,6 +44,21 @@ export function fork25Base(apiToken: string): SeatableBase {
       return [courseCol, teacherCol];
     },
     sourceLabel: (tableName) => `fork25 - ${tableName}`,
+  };
+}
+
+// ad-astra 映射规则：单表 opendata_export，固定列名，来源按行的「来源库」细分
+export function astraBase(apiToken: string): SeatableBase {
+  return {
+    apiToken,
+    resolveColumns: (_tableName, columns) => {
+      if (!columns.includes("课程名称") || !columns.includes("授课教师")) return null;
+      return ["课程名称", "授课教师"];
+    },
+    sourceLabel: (_tableName, row) => {
+      const lib = row?.["来源库"];
+      return typeof lib === "string" && lib ? `鼓励你学哪门课榜 - ${lib}` : "鼓励你学哪门课榜";
+    },
   };
 }
 
@@ -136,7 +152,7 @@ export async function fetchSeatable(base: SeatableBase): Promise<RawEntry[]> {
       const entry: RawEntry = {
         课程名称: row[courseCol],
         教师: row[teacherCol],
-        来源: base.sourceLabel(tableName),
+        来源: base.sourceLabel(tableName, row),
       };
       // 提取并整理所有评价列
       let cnt = 0;

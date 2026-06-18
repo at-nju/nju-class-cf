@@ -6,6 +6,7 @@ export interface Env {
   ASSETS: Fetcher;
   SEATABLE_API_TOKEN?: string; // NJU Table
   SEATABLE_FORK_API_TOKEN?: string; // fork25
+  SEATABLE_ASTRA_API_TOKEN?: string; // ad-astra
   ALLOW_MANUAL_REFRESH?: string;
 }
 

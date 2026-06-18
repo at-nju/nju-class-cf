@@ -1,5 +1,5 @@
 import { STATIC_SOURCES } from "./data/static";
-import { fetchSeatable, njuTableBase, fork25Base } from "./seatable";
+import { fetchSeatable, njuTableBase, fork25Base, astraBase } from "./seatable";
 import { mergeEntries, type ReviewRow } from "./merge";
 import type { Env } from "./index";
 
@@ -79,6 +79,7 @@ export async function refresh(env: Env): Promise<number> {
   const bases = [];
   if (env.SEATABLE_API_TOKEN) bases.push(njuTableBase(env.SEATABLE_API_TOKEN));
   if (env.SEATABLE_FORK_API_TOKEN) bases.push(fork25Base(env.SEATABLE_FORK_API_TOKEN));
+  if (env.SEATABLE_ASTRA_API_TOKEN) bases.push(astraBase(env.SEATABLE_ASTRA_API_TOKEN));
 
   const seatableGroups = [];
   for (const base of bases) {
