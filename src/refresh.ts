@@ -14,8 +14,20 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-// 写入暂存表，原子替换至正式表并重建 FTS。拼音是写库时的派生物，在此内联算出。
-export async function writeToD1(db: D1Database, entries: Entry[]): Promise<void> {
+// 内容哈希：稳定序列化整套去重后条目（条目间排序、sources 内排序），用于判断数据是否变化。
+export async function hashEntries(entries: Entry[]): Promise<string> {
+  const SEP = "\u001f"; // 字段分隔符，避免相邻字段拼接产生歧义
+  const canon = entries
+    .map((e) => [e.course ?? "", e.teacher ?? "", e.review, [...e.sources].sort().join(",")].join(SEP))
+    .sort()
+    .join("\n");
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canon));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// 写入暂存表，原子替换至正式表并重建 FTS，同时把内容哈希写入 meta（与数据同事务）。
+// 拼音是写库时的派生物，在此内联算出。
+export async function writeToD1(db: D1Database, entries: Entry[], contentHash: string): Promise<void> {
   await db.prepare("DELETE FROM reviews_staging").run();
 
   const rowChunks = chunk(entries, ROWS_PER_STMT);
@@ -75,6 +87,9 @@ export async function writeToD1(db: D1Database, entries: Entry[]): Promise<void>
        SELECT id, course, teacher, teacher_py, course_py FROM reviews`,
     ),
     db.prepare("DELETE FROM reviews_staging"),
+    db
+      .prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('content_hash', ?)")
+      .bind(contentHash),
   ]);
 }
 
@@ -87,13 +102,27 @@ export async function refresh(env: Env): Promise<number> {
 
   const seatableEntries = (await Promise.all(bases.map((base) => fetchSeatable(base)))).flat();
   const entries = dedup([...seatableEntries, ...loadStatic()]);
-  await writeToD1(env.DB, entries);
+  await writeIfChanged(env.DB, entries);
   return entries.length;
 }
 
 // 仅使用静态数据填充 D1
 export async function seedStaticOnly(env: Env): Promise<number> {
   const entries = dedup(loadStatic());
-  await writeToD1(env.DB, entries);
+  await writeIfChanged(env.DB, entries);
   return entries.length;
+}
+
+// 内容未变则整体跳过写库（仅 1 行读、0 行写）；变了才走全量重建并更新哈希。
+async function writeIfChanged(db: D1Database, entries: Entry[]): Promise<boolean> {
+  const newHash = await hashEntries(entries);
+  const cur = await db
+    .prepare("SELECT value FROM meta WHERE key = 'content_hash'")
+    .first<{ value: string }>();
+  if (cur?.value === newHash) {
+    console.log("Data unchanged, skipping D1 rebuild");
+    return false;
+  }
+  await writeToD1(db, entries, newHash);
+  return true;
 }

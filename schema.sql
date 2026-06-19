@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS reviews (
   course           TEXT,              -- 课程名称
   teacher          TEXT,              -- 教师（可含多名）
   sources          TEXT,              -- 来源，JSON 数组字符串
-  review           TEXT,              -- 评价_0，可空
+  review           TEXT,              -- 评价内容，可空
   teacher_py       TEXT,              -- 教师全拼，各老师以空格分隔
   teacher_initials TEXT,              -- 教师拼音首字母，各老师以空格分隔
   course_py        TEXT,              -- 课程全拼
@@ -33,4 +33,10 @@ CREATE VIRTUAL TABLE IF NOT EXISTS reviews_fts USING fts5(
   teacher_py,
   course_py,
   tokenize = 'trigram'
+);
+
+-- meta: 键值表。content_hash 存上次写入数据的内容哈希，刷新时若数据未变则整体跳过重建。
+CREATE TABLE IF NOT EXISTS meta (
+  key   TEXT PRIMARY KEY,
+  value TEXT
 );

@@ -6,9 +6,10 @@ compatibility_flags = ["nodejs_compat"]
 # 静态前端（index.html + bootstrap）。非 /search/* 的请求由 Assets 直接服务。
 assets = { directory = "./public", binding = "ASSETS" }
 
-# 每小时刷新一次数据（替代原 Flask 后台线程）
+# 每天零点刷新一次数据。
+# 数据未变时刷新会因内容哈希一致而整体跳过，不重写 D1。
 [triggers]
-crons = ["0 * * * *"]
+crons = ["0 0 * * *"]
 
 # D1 数据库：先 `wrangler d1 create nju-class`，把返回的 database_id 填到下面
 [[d1_databases]]
