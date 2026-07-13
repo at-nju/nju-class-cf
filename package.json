@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "postdeploy": "curl -fsS -X POST -H \"Authorization: Bearer $DEPLOY_REFRESH_TOKEN\" \"$WORKER_URL/__refresh\"",
     "schema:local": "wrangler d1 execute nju-class --local --file=./schema.sql",
     "schema:remote": "wrangler d1 execute nju-class --remote --file=./schema.sql",
     "typecheck": "tsc --noEmit"

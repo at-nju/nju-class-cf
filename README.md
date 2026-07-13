@@ -55,8 +55,12 @@ npx wrangler secret put SEATABLE_API_TOKEN
 npx wrangler secret put SEATABLE_FORK_API_TOKEN
 # ad-astra 鼓励你学哪门课榜
 npx wrangler secret put SEATABLE_ASTRA_API_TOKEN
-npx wrangler deploy
-# 首次部署后手动触发一次刷新（临时开启 ALLOW_MANUAL_REFRESH 或等待首个 cron）
+
+# 部署后自动刷新
+export DEPLOY_REFRESH_TOKEN="$(openssl rand -hex 32)"
+printf '%s' "$DEPLOY_REFRESH_TOKEN" | npx wrangler secret put DEPLOY_REFRESH_TOKEN
+export WORKER_URL="https://xk.nju.at"
+npm run deploy
 ```
 
 ## 许可证

@@ -7,6 +7,7 @@ export interface Env {
   SEATABLE_API_TOKEN?: string; // NJU Table
   SEATABLE_FORK_API_TOKEN?: string; // fork25
   SEATABLE_ASTRA_API_TOKEN?: string; // ad-astra
+  DEPLOY_REFRESH_TOKEN?: string;
   ALLOW_MANUAL_REFRESH?: string;
 }
 
@@ -15,6 +16,17 @@ function json(data: unknown, status = 200): Response {
     status,
     headers: { "Content-Type": "application/json; charset=utf-8" },
   });
+}
+
+async function validRefreshToken(request: Request, expected?: string): Promise<boolean> {
+  if (!expected) return false;
+  const provided = request.headers.get("Authorization")?.replace(/^Bearer /, "") ?? "";
+  const encoder = new TextEncoder();
+  const [a, b] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(provided)),
+    crypto.subtle.digest("SHA-256", encoder.encode(expected)),
+  ]);
+  return crypto.subtle.timingSafeEqual(a, b);
 }
 
 // 检查是否有数据
@@ -49,8 +61,13 @@ export default {
       return handleSearch(env, "course", url.searchParams.get("name"));
     }
 
-    // 手动刷新数据（仅本地/测试）
-    if (pathname === "/__refresh" && env.ALLOW_MANUAL_REFRESH === "true") {
+    // 本地允许 GET；部署脚本使用带 Token 的 POST。
+    if (pathname === "/__refresh") {
+      const allowed =
+        (request.method === "GET" && env.ALLOW_MANUAL_REFRESH === "true") ||
+        (request.method === "POST" && (await validRefreshToken(request, env.DEPLOY_REFRESH_TOKEN)));
+      if (!allowed) return json({ error: "Unauthorized" }, 401);
+
       try {
         const count = await refresh(env);
         return json({ ok: true, rows: count });
