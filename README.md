@@ -45,6 +45,36 @@ open http://localhost:8787/
 curl "http://localhost:8787/search/teacher?name=zml"
 ```
 
+## 手动导入数据源
+
+导入文件是 JSON 数组，每项只包含 `course`、`teacher`、`review`：
+
+```json
+[
+  {
+    "course": "数字逻辑与计算机组成实验",
+    "teacher": "李婷",
+    "review": "评分：5/5 | 学期：2026春\n评价正文"
+  }
+]
+```
+
+先校验并预览：
+
+```bash
+npm run cli -- import to-be-imported.json --source 手动导入
+```
+
+确认后写入 `src/data/imported.json`：
+
+```bash
+npm run cli -- import to-be-imported.json --source 手动导入 --apply
+```
+
+`--source` 表示一个来源的完整快照。应用时会完整替换该来源此前的数据，同时保留其他导入来源。CLI 会统一把来源注入内部 `sources` 字段；输入文件不得自行包含 `sources`。
+
+导入后运行 `npm run deploy`，部署后的 `postdeploy` 会触发线上刷新。
+
 ## 部署
 
 ```bash

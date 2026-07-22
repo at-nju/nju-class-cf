@@ -3,6 +3,7 @@ import nanxiaobao from "../data/南小宝.json";
 import oldList from "../data/旧红黑榜.json";
 import list2024 from "../data/红黑榜_2024.json";
 import list2023 from "../data/2023级本科生红黑榜.json";
+import imported from "../data/imported.json";
 import type { Entry } from "../entry";
 import { extractReviews } from "./extract";
 
@@ -28,5 +29,6 @@ export function loadStatic(): Entry[] {
     ...jsonAdapter(oldList as unknown[], "旧红黑榜.json"),
     ...jsonAdapter(list2024 as unknown[], "红黑榜_2024.json"),
     ...jsonAdapter(list2023 as unknown[], "2023级本科生红黑榜.json"),
+    ...(imported as Entry[]),
   ];
 }
